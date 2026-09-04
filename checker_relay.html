@@ -1,0 +1,1075 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Checker Relay — recursive adjacent-swap sort</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#170f09;
+    --bg-grain-a: rgba(255,255,255,0.012);
+    --panel:#241a11;
+    --panel-line: rgba(201,162,39,.22);
+    --ivory:#efe5d1;
+    --muted:#a4937a;
+    --muted-dim:#79694f;
+    --brass:#caa22e;
+    --brass-soft: rgba(202,162,46,.14);
+    --red-a:#e2585c; --red-b:#9c1f22; --red-c:#5c0f11;
+    --blk-a:#4c4c4c; --blk-b:#161616; --blk-c:#040404;
+    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --display: 'Fraunces', Georgia, serif;
+    --radius: 12px;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      repeating-linear-gradient(180deg, var(--bg-grain-a) 0px, transparent 2px, transparent 4px),
+      radial-gradient(1100px 620px at 20% -10%, #241708 0%, transparent 60%),
+      var(--bg);
+    color: var(--ivory);
+    font-family: var(--mono);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+    padding: 32px 20px 60px;
+  }
+
+  ::selection{ background: var(--brass-soft); color: var(--ivory); }
+
+  button, input{ font-family: inherit; }
+  button:focus-visible, input:focus-visible, .tab:focus-visible{
+    outline: 2px solid var(--brass);
+    outline-offset: 2px;
+  }
+
+  .console{ max-width: 1180px; margin: 0 auto; }
+
+  /* ---------- header ---------- */
+  .topbar{
+    display:flex; align-items:flex-end; justify-content:space-between;
+    flex-wrap: wrap; gap: 20px;
+    padding-bottom: 22px; margin-bottom: 24px;
+    border-bottom: 1px solid var(--panel-line);
+  }
+  .brand{ display:flex; align-items:center; gap:14px; }
+  .brand-dots{ display:flex; align-items:center; gap:5px; }
+  .brand-dots span{ width:13px; height:13px; border-radius:50%; display:inline-block; }
+  .brand-dots span.r{ background: radial-gradient(circle at 32% 28%, var(--red-a), var(--red-b) 60%, var(--red-c)); }
+  .brand-dots span.k{ background: radial-gradient(circle at 32% 28%, var(--blk-a), var(--blk-b) 60%, var(--blk-c)); }
+  .brand h1{
+    font-family: var(--display); font-weight:600; font-size: 30px;
+    letter-spacing: .2px; color: var(--ivory); line-height:1;
+  }
+  .brand p{ margin-top:6px; color: var(--muted); font-size: 12.5px; }
+
+  .controls{ display:flex; align-items:flex-end; gap: 22px; flex-wrap: wrap; }
+  .field{ display:flex; flex-direction:column; gap:6px; }
+  .field label{ color: var(--muted); font-size: 11.5px; }
+  .field .row{ display:flex; gap:8px; align-items:center; }
+  input[type=number]{
+    width: 58px; background: var(--panel); border:1px solid var(--panel-line);
+    color: var(--ivory); border-radius: 6px; padding: 7px 8px; font-size:14px;
+  }
+  input[type=range]{ accent-color: var(--brass); }
+
+  button{
+    background: transparent; color: var(--ivory);
+    border:1px solid var(--panel-line); border-radius: 6px;
+    padding: 8px 13px; cursor:pointer; font-size: 13px;
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+  }
+  button:hover:not(:disabled){ border-color: var(--brass); color: var(--brass); }
+  button:disabled{ opacity:.35; cursor: not-allowed; }
+  button.primary{ border-color: var(--brass); color: var(--brass); background: var(--brass-soft); }
+  .transport{ display:flex; gap:6px; }
+
+  /* ---------- layout ---------- */
+  .stage{ display:grid; grid-template-columns: 1.55fr 1fr; gap: 26px; align-items:start; }
+  @media (max-width: 900px){ .stage{ grid-template-columns: 1fr; } }
+
+  .panel{
+    background: var(--panel); border:1px solid var(--panel-line);
+    border-radius: var(--radius); padding: 24px;
+  }
+
+  /* ---------- board ---------- */
+  .board-wrap{ min-width:0; }
+  .board-scroll{ overflow-x:auto; padding-bottom: 4px; }
+  .board{ position:relative; margin: 6px 0 22px; }
+  .checker{
+    position:absolute; top:0; border-radius:50%;
+    transition: transform .5s cubic-bezier(.65,.05,.36,1);
+  }
+  .board.no-anim .checker, .board.no-anim .interval-divider{ transition:none; }
+  .checker .rim{
+    position:absolute; inset:0; border-radius:50%;
+    border: 2px solid rgba(202,162,46,.4);
+  }
+  .checker .face{ position:absolute; inset: 3px; border-radius:50%; }
+  .checker.red .face{
+    background: radial-gradient(circle at 32% 26%, var(--red-a), var(--red-b) 55%, var(--red-c) 100%);
+    box-shadow: 0 3px 0 #3d0a0b, 0 6px 10px rgba(0,0,0,.5);
+  }
+  .checker.black .face{
+    background: radial-gradient(circle at 32% 26%, var(--blk-a), var(--blk-b) 55%, var(--blk-c) 100%);
+    box-shadow: 0 3px 0 #000, 0 6px 10px rgba(0,0,0,.6);
+  }
+  .checker.swapping .rim{ border-color: var(--brass); box-shadow: 0 0 0 4px var(--brass-soft); }
+  .checker.locked .rim{ border-color: var(--brass); }
+  .checker.preview .rim{
+    border-color: var(--brass); border-style: dashed;
+    animation: previewPulse 0.9s ease-in-out infinite;
+  }
+  @keyframes previewPulse{
+    0%,100%{ box-shadow: 0 0 0 2px rgba(202,162,46,.10); }
+    50%{ box-shadow: 0 0 0 5px rgba(202,162,46,.3); }
+  }
+
+  .interval-divider{
+    position:absolute; top:0; bottom:0; width:2px;
+    background: var(--brass); opacity:0;
+    transition: transform .5s cubic-bezier(.65,.05,.36,1), opacity .3s ease;
+    pointer-events:none;
+  }
+
+  .scoreboard{
+    display:flex; flex-wrap:wrap; gap: 28px; padding: 14px 0;
+    border-top: 1px solid var(--panel-line); border-bottom: 1px solid var(--panel-line);
+  }
+  .stat .stat-label{ display:block; color: var(--muted); font-size: 11px; margin-bottom:4px; }
+  .stat .stat-value{ font-size: 18px; color: var(--ivory); }
+  .stat .stat-value b{ color: var(--brass); font-weight:600; }
+  .target-preview{ display:flex; align-items:center; gap:7px; }
+  .target-preview .dots{ display:flex; gap:3px; }
+  .target-preview .dot{ width:9px; height:9px; border-radius:50%; }
+  .target-preview .dot.r{ background: var(--red-a); }
+  .target-preview .dot.k{ background: #cfcfcf; }
+
+  .progress{ height:4px; background: rgba(255,255,255,.06); border-radius:4px; margin-top:16px; overflow:hidden; }
+  .progress-fill{ height:100%; background: var(--brass); width:0%; transition: width .35s ease; }
+
+  .scrub{ width:100%; margin-top: 12px; }
+
+  .status-line{ margin-top: 14px; color: var(--muted); min-height: 18px; font-size: 13px; }
+  .status-line b{ color: var(--ivory); font-weight:500; }
+
+  .array-line{ margin-top: 8px; font-size: 13px; letter-spacing:.2px; }
+  .array-line .array-label{ color: var(--muted-dim); margin-right: 2px; }
+  .array-line .bracket, .array-line .comma{ color: var(--muted-dim); }
+  .array-line .arr-el{ display:inline-block; transition: color .25s ease, transform .25s ease; }
+  .array-line .arr-el.r{ color: var(--red-a); }
+  .array-line .arr-el.k{ color: #cfcfcf; }
+  .array-line .arr-el.changed{ color: var(--brass); transform: translateY(-2px); }
+
+  /* ---------- inspector ---------- */
+  .inspector{ padding:0; overflow:hidden; }
+  .tabs{ display:flex; gap: 4px; padding: 10px 10px 0; border-bottom: 1px solid var(--panel-line); }
+  .tab{
+    background:none; border:none; color: var(--muted);
+    padding: 9px 13px; font-size: 12.5px; border-radius: 6px 6px 0 0;
+    border-bottom: 2px solid transparent; cursor:pointer;
+  }
+  .tab:hover{ color: var(--ivory); }
+  .tab.active{ color: var(--brass); border-bottom-color: var(--brass); }
+
+  .tab-panel{ padding: 18px 20px; height: 430px; overflow-y:auto; }
+  .tab-panel.hidden{ display:none; }
+
+  /* code */
+  .code{ font-family: var(--mono); font-size: 13px; margin:0; white-space:pre; }
+  .code .line{
+    display:flex; gap:14px; padding: 2.5px 8px; border-left: 3px solid transparent;
+    border-radius: 3px;
+  }
+  .code .line.active{ background: var(--brass-soft); border-left-color: var(--brass); }
+  .code .ln{ color: var(--muted-dim); width: 16px; text-align:right; user-select:none; flex-shrink:0; }
+  .code .src{ white-space:pre; }
+  .tok-kw{ color: var(--brass); }
+  .tok-num{ color: #d9a86c; }
+  .tok-id{ color: var(--ivory); }
+  .tok-op{ color: var(--muted); }
+
+  /* full code tab */
+  .full-code-head{
+    display:flex; align-items:center; justify-content:space-between;
+    gap: 12px; margin-bottom: 14px;
+  }
+  .full-code-head p{ color: var(--muted); font-size: 12.5px; line-height:1.5; }
+  .full-code-head code{
+    font-family: var(--mono); color: var(--brass); background: var(--brass-soft);
+    padding: 1px 5px; border-radius: 4px; font-size: 12px;
+  }
+  #copyBtn{ flex-shrink:0; }
+  #copyBtn.copied{ border-color: var(--brass); color: var(--brass); background: var(--brass-soft); }
+  .full-code{
+    font-family: var(--mono); font-size: 12.5px; line-height:1.65; color: var(--ivory);
+    background: rgba(0,0,0,.22); border: 1px solid var(--panel-line);
+    border-radius: 6px; padding: 14px 16px; white-space: pre; overflow-x:auto;
+  }
+
+  /* swap table */
+  .swap-table{ width:100%; border-collapse: collapse; font-size: 13px; }
+  .swap-table th{
+    text-align:left; color: var(--muted); font-weight:500; font-size: 11px;
+    padding: 6px 8px; border-bottom: 1px solid var(--panel-line);
+  }
+  .swap-table td{ padding: 7px 8px; border-bottom: 1px solid rgba(201,162,39,.08); color: var(--ivory); }
+  .swap-table tr.latest td{ color: var(--brass); }
+  .swap-table tbody tr:last-child td{ border-bottom:none; }
+  .swap-note{ color: var(--muted-dim); font-size: 11px; margin-top: 10px; }
+
+  /* recursion stack */
+  .stack .frame{
+    border-left: 2px solid var(--panel-line);
+    padding: 8px 0 8px 14px; margin-bottom: 6px;
+  }
+  .stack .frame.active{ border-left-color: var(--brass); }
+  .frame-head{ color: var(--ivory); font-size: 13px; }
+  .frame.active .frame-head{ color: var(--brass); }
+  .frame-meta{ color: var(--muted); font-size: 11.5px; margin-top:2px; }
+  .stack .empty{ color: var(--muted); font-size: 13px; }
+
+  /* idea tab */
+  .idea code{
+    font-family: var(--mono); color: var(--brass); background: var(--brass-soft);
+    padding: 1px 5px; border-radius: 4px; font-size: 12.5px;
+  }
+  .idea b{ color: var(--ivory); font-weight:600; }
+  .idea-lead{ color: var(--ivory); font-size: 13.5px; line-height:1.65; margin-bottom: 22px; }
+  .idea-block{ margin-bottom: 20px; padding-top: 16px; border-top: 1px solid var(--panel-line); }
+  .idea-block:first-of-type{ border-top: none; padding-top: 0; }
+  .idea-block h3{
+    font-family: var(--display); font-weight:600; font-size: 15px;
+    color: var(--brass); margin-bottom: 8px; letter-spacing: .2px;
+  }
+  .idea-block p{ color: var(--muted); font-size: 13px; line-height:1.65; margin-bottom: 10px; }
+  .idea-block p:last-child{ margin-bottom:0; }
+  .code-mini{
+    font-family: var(--mono); font-size: 12px; color: var(--ivory);
+    background: rgba(0,0,0,.22); border: 1px solid var(--panel-line);
+    border-radius: 6px; padding: 10px 12px; margin: 8px 0 10px;
+    white-space: pre; overflow-x:auto;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .checker{ transition: none !important; }
+    .interval-divider{ transition: none !important; }
+    .checker.preview .rim{ animation: none !important; box-shadow: 0 0 0 3px rgba(202,162,46,.24); }
+    .progress-fill{ transition:none !important; }
+  }
+</style>
+</head>
+<body>
+  <div class="console">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-dots"><span class="r"></span><span class="k"></span></div>
+        <div>
+          <h1>Checker Relay</h1>
+          <p>n red, n black, into one alternating row.</p>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="field">
+          <label>version</label>
+          <div class="transport">
+            <button class="mode-btn primary" data-mode="recursive">recursive</button>
+            <button class="mode-btn" data-mode="iterative">iterative</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="nInput">pairs (n)</label>
+          <div class="row">
+            <input id="nInput" type="number" min="1" value="4">
+            <button id="buildBtn" class="primary">build</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>transport</label>
+          <div class="transport">
+            <button id="resetBtn" title="back to start">reset</button>
+            <button id="backBtn" title="step back">◂</button>
+            <button id="playBtn" title="play / pause">play</button>
+            <button id="fwdBtn" title="step forward">▸</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="speedInput">speed</label>
+          <input id="speedInput" type="range" min="1" max="5" value="3">
+        </div>
+      </div>
+    </header>
+
+    <main class="stage">
+      <section class="panel board-wrap">
+        <div class="board-scroll">
+          <div class="board" id="board"></div>
+        </div>
+
+        <div class="scoreboard">
+          <div class="stat">
+            <span class="stat-label">step</span>
+            <span class="stat-value"><b id="stepCur">0</b> / <span id="stepTotal">0</span></span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">swaps</span>
+            <span class="stat-value"><b id="swapCur">0</b> / <span id="swapTotal">0</span></span>
+          </div>
+          <div class="stat">
+            <span class="stat-label" id="depthLabel">recursion depth</span>
+            <span class="stat-value" id="depthVal">0</span>
+          </div>
+          <div class="stat target-preview">
+            <span class="stat-label">target</span>
+            <span class="dots" id="targetDots"></span>
+          </div>
+        </div>
+
+        <div class="progress"><div class="progress-fill" id="progressFill"></div></div>
+        <input id="scrub" class="scrub" type="range" min="0" max="0" value="0">
+        <p class="status-line" id="statusLine">Set n and press build to start.</p>
+        <p class="array-line" id="arrayLine"></p>
+      </section>
+
+      <section class="panel inspector">
+        <div class="tabs">
+          <button class="tab active" data-tab="code">code</button>
+          <button class="tab" data-tab="full">full code</button>
+          <button class="tab" data-tab="swaps">swaps</button>
+          <button class="tab" data-tab="recursion" id="recursionTabBtn">recursion</button>
+          <button class="tab" data-tab="idea">idea</button>
+        </div>
+        <div class="tab-panel" id="panel-code"><pre class="code" id="codeBlock"></pre></div>
+        <div class="tab-panel hidden" id="panel-full">
+          <div class="full-code-head">
+            <p id="fullCodeDesc">The complete function — the loop you're stepping through lives inside <code>solve()</code>.</p>
+            <button id="copyBtn" type="button">copy</button>
+          </div>
+          <pre class="full-code" id="fullCodeBlock"></pre>
+        </div>
+        <div class="tab-panel hidden" id="panel-swaps">
+          <table class="swap-table">
+            <thead><tr><th>#</th><th>left</th><th>right</th></tr></thead>
+            <tbody id="swapTableBody"></tbody>
+          </table>
+          <p class="swap-note" id="swapNote"></p>
+        </div>
+        <div class="tab-panel hidden" id="panel-recursion">
+          <div class="stack" id="stackView"></div>
+        </div>
+        <div class="tab-panel hidden" id="panel-idea">
+          <div class="idea">
+            <p class="idea-lead">Think of the row as nested layers. Walk the first black checker left until it sits right behind the last red — that's <code>n_pairs − 1</code> swaps. Slots <code>0</code> and <code>1</code> are now permanently correct, and what's left is the exact same shape of problem, one layer smaller.</p>
+
+            <div class="idea-block">
+              <h3>the invariant</h3>
+              <p>Before every call, the slice from <code>offset</code> holds <code>n_pairs</code> reds followed by <code>n_pairs</code> blacks — the same shape as the very first row, just narrower.</p>
+              <pre class="code-mini">arr[offset : offset + 2*n_pairs] == [0]*n_pairs + [1]*n_pairs</pre>
+            </div>
+
+            <div class="idea-block">
+              <h3>one layer of work</h3>
+              <p>The loop drags the first black checker — sitting at <code>offset + n_pairs</code> — left, one adjacent swap at a time, until it lands at <code>offset + 1</code>. That's the only place any swapping happens; see the loop and swap lines in the <b>code</b> tab.</p>
+              <pre class="code-mini">for i in range(n_pairs - 1, 0, -1):
+    left, right = offset + i, offset + i + 1
+    arr[left], arr[right] = arr[right], arr[left]</pre>
+            </div>
+
+            <div class="idea-block">
+              <h3>base case</h3>
+              <p><code>n_pairs == 0</code> means the slice is empty. Nothing left to fix, so <code>solve()</code> just returns — this is what finally empties the stack in the <b>recursion</b> tab.</p>
+            </div>
+
+            <div class="idea-block">
+              <h3>why it's optimal</h3>
+              <p>Each layer costs <code>n_pairs − 1</code> swaps, so the total across all layers is</p>
+              <pre class="code-mini">(n-1) + (n-2) + ... + 0 = n(n-1)/2</pre>
+              <p>— exactly the number of red/black pairs that start out of order. No sequence of adjacent swaps can do it in fewer.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+<script>
+(function(){
+  const codeLinesRecursive = [
+    "def solve(n_pairs, offset):",
+    "    if n_pairs <= 0:",
+    "        return",
+    "",
+    "    for i in range(n_pairs - 1, 0, -1):",
+    "        left, right = offset + i, offset + i + 1",
+    "        arr[left], arr[right] = arr[right], arr[left]",
+    "        swaps.append((left, right))",
+    "",
+    "    solve(n_pairs - 1, offset + 2)"
+  ];
+  const codeLinesIterative = [
+    "for n_pairs in range(n, 0, -1):",
+    "    for i in range(n_pairs - 1, 0, -1):",
+    "        left, right = offset + i, offset + i + 1",
+    "        arr[left], arr[right] = arr[right], arr[left]",
+    "        swaps.append((left, right))",
+    "    offset += 2"
+  ];
+  const KEYWORDS = ["def","if","return","for","in","range"];
+
+  const fullCodeTextRecursive =
+`def transform_checkers(n):
+    """
+    Turns [0]*n + [1]*n into [0,1,0,1,...,0,1] using only
+    adjacent swaps, via recursion.
+
+    Returns:
+        swaps  -- list of (i, j) index pairs, in the order they were applied
+        arr    -- the final (alternating) array
+    """
+    arr = [0] * n + [1] * n
+    swaps = []
+
+    def solve(n_pairs, offset):
+        # Base case: subarray of size 0 needs no work.
+        if n_pairs <= 0:
+            return
+
+        # Invariant: arr[offset : offset + 2*n_pairs] == [0]*n_pairs + [1]*n_pairs
+        # Walk the checker at (offset + n_pairs) -- the first black one --
+        # left, one adjacent swap at a time, until it reaches (offset + 1).
+        for i in range(n_pairs - 1, 0, -1):
+            left, right = offset + i, offset + i + 1
+            arr[left], arr[right] = arr[right], arr[left]
+            swaps.append((left, right))
+
+        # Now arr[offset] == 0 and arr[offset+1] == 1 are permanently correct.
+        # Recurse on the inner subarray, which has the identical shape.
+        solve(n_pairs - 1, offset + 2)
+
+    solve(n, 0)
+    return swaps, arr`;
+
+  const fullCodeTextIterative =
+`def transform_checkers_iterative(n):
+    """
+    Same result as transform_checkers, but with an explicit loop
+    instead of recursion -- no call-stack growth, so it comfortably
+    handles much larger n.
+
+    Returns:
+        swaps -- list of (i, j) index pairs, in the order they were applied
+        arr   -- the final (alternating) array
+    """
+    arr = [0] * n + [1] * n
+    swaps = []
+    offset = 0
+
+    # Each pass through this loop does the work of one recursive call:
+    # walk the first black checker in the current slice home, then
+    # shrink the slice by moving offset two slots to the right.
+    for n_pairs in range(n, 0, -1):
+        for i in range(n_pairs - 1, 0, -1):
+            left, right = offset + i, offset + i + 1
+            arr[left], arr[right] = arr[right], arr[left]
+            swaps.append((left, right))
+        offset += 2
+
+    return swaps, arr`;
+
+  function escapeHtml(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+  function tokenizeLine(line){
+    if (line.trim() === "") return "&nbsp;";
+    let html = "", i = 0;
+    const isWordChar = c => /[A-Za-z0-9_]/.test(c);
+    while (i < line.length){
+      const c = line[i];
+      if (c === " "){ html += " "; i++; continue; }
+      if (/[0-9]/.test(c)){
+        let j=i; while (j<line.length && /[0-9]/.test(line[j])) j++;
+        html += `<span class="tok-num">${line.slice(i,j)}</span>`; i=j; continue;
+      }
+      if (/[A-Za-z_]/.test(c)){
+        let j=i; while (j<line.length && isWordChar(line[j])) j++;
+        const word = line.slice(i,j);
+        html += KEYWORDS.includes(word) ? `<span class="tok-kw">${word}</span>` : `<span class="tok-id">${word}</span>`;
+        i=j; continue;
+      }
+      html += `<span class="tok-op">${escapeHtml(c)}</span>`; i++;
+    }
+    return html;
+  }
+
+  // ---------- simulate the recursion, recording every event ----------
+  function simulateRecursive(n){
+    const events = [];
+    const initialIdAtSlot = [];
+    for (let i=0;i<2*n;i++) initialIdAtSlot.push(i);
+
+    events.push({type:'init'});
+    events.push({type:'invoke'});
+
+    function solve(n_pairs, offset, depth){
+      events.push({type:'call', lines:[1], depth, n_pairs, offset});
+      events.push({type:'check', lines:[2], depth, n_pairs, offset, isBase:n_pairs<=0});
+      if (n_pairs <= 0){
+        events.push({type:'return', lines:[3], depth, n_pairs, offset});
+        events.push({type:'pop', depth});
+        return;
+      }
+      for (let i=n_pairs-1;i>=1;i--){
+        const left = offset+i, right = offset+i+1;
+        events.push({type:'loop', lines:[5], depth, n_pairs, offset, i, left, right});
+        events.push({type:'swap', lines:[6,7,8], depth, n_pairs, offset, i, left, right});
+      }
+      events.push({type:'recurse', lines:[10], depth, n_pairs, offset});
+      solve(n_pairs-1, offset+2, depth+1);
+      events.push({type:'pop', depth});
+    }
+
+    solve(n, 0, 0);
+    events.push({type:'final'});
+    const totalSwaps = events.filter(e=>e.type==='swap').length;
+    return {events, initialIdAtSlot, totalSwaps};
+  }
+
+  function simulateIterative(n){
+    const events = [];
+    const initialIdAtSlot = [];
+    for (let i=0;i<2*n;i++) initialIdAtSlot.push(i);
+
+    events.push({type:'init'});
+
+    let offset = 0;
+    for (let n_pairs=n; n_pairs>=1; n_pairs--){
+      events.push({type:'layer', lines:[1], n_pairs, offset});
+      for (let i=n_pairs-1;i>=1;i--){
+        const left = offset+i, right = offset+i+1;
+        events.push({type:'loop', lines:[2], n_pairs, offset, i, left, right});
+        events.push({type:'swap', lines:[3,4,5], n_pairs, offset, i, left, right});
+      }
+      events.push({type:'advance', lines:[6], n_pairs, offset});
+      offset += 2;
+    }
+    events.push({type:'final'});
+    const totalSwaps = events.filter(e=>e.type==='swap').length;
+    return {events, initialIdAtSlot, totalSwaps};
+  }
+
+  // computeStateAt is called on every render. For large n, replaying every
+  // event from scratch each time would be O(events) per call and O(events^2)
+  // -- i.e. O(n^4) -- over a full playthrough. Instead we cache the state at
+  // the last-computed index and, for the common case of moving forward
+  // (stepping / Play), only apply the new events since then -- O(1) amortized
+  // per step regardless of n. Backward jumps (step back / scrub) still fall
+  // back to a full replay, since those are occasional user actions rather
+  // than a per-frame cost.
+  let cachedSim = null, cachedIdx = 0, cachedState = null;
+
+  function freshState(sim){
+    const idAtSlot = sim.initialIdAtSlot.slice();
+    const slotOfId = new Array(idAtSlot.length);
+    idAtSlot.forEach((id,slot)=> slotOfId[id]=slot);
+    return {
+      idAtSlot,
+      slotOfId,
+      swapRows: [],
+      stack: [],
+      currentLines: [1],
+      lastEvent: null,
+      lockedUpTo: 0
+    };
+  }
+
+  function applyEventToState(state, e){
+    if (e.lines) state.currentLines = e.lines;
+    state.lastEvent = e;
+    switch(e.type){
+      case 'call': state.stack.push({depth:e.depth, n_pairs:e.n_pairs, offset:e.offset}); break;
+      case 'layer': state.stack.length = 0; state.stack.push({depth:0, n_pairs:e.n_pairs, offset:e.offset}); break;
+      case 'pop': state.stack.pop(); break;
+      case 'recurse': case 'advance': state.lockedUpTo = e.offset + 2; break;
+      case 'final': state.stack.length = 0; break;
+      case 'swap': {
+        const a = state.idAtSlot[e.left], b = state.idAtSlot[e.right];
+        state.idAtSlot[e.left]=b; state.idAtSlot[e.right]=a;
+        state.slotOfId[a] = e.right; state.slotOfId[b] = e.left;
+        state.swapRows.push({num:state.swapRows.length+1, left:e.left, right:e.right});
+        break;
+      }
+    }
+  }
+
+  function computeStateAt(sim, targetIdx){
+    if (cachedSim !== sim || targetIdx < cachedIdx){
+      cachedSim = sim;
+      cachedState = freshState(sim);
+      cachedIdx = 0;
+    }
+    while (cachedIdx < targetIdx){
+      applyEventToState(cachedState, sim.events[cachedIdx]);
+      cachedIdx++;
+    }
+    return cachedState;
+  }
+
+  function statusFor(e, n){
+    if (!e) return "Set n and press build to start.";
+    switch(e.type){
+      case 'init': return "Building the initial row: n red checkers followed by n black checkers.";
+      case 'invoke': return `Calling solve(n_pairs=${n}, offset=0) on the full row.`;
+      case 'call': return `Entering solve(n_pairs=${e.n_pairs}, offset=${e.offset}) — slots ${e.offset}\u2013${e.offset+2*e.n_pairs-1}.`;
+      case 'layer': return `Starting the n_pairs=${e.n_pairs} layer at offset ${e.offset} — slots ${e.offset}\u2013${e.offset+2*e.n_pairs-1}.`;
+      case 'check': return e.isBase ? "n_pairs is 0 — this slice is already sorted." : `n_pairs=${e.n_pairs} > 0 — work remains in this slice.`;
+      case 'loop': return "Scanning left to bring the next black checker home.";
+      case 'swap': return `Swapped slots ${e.left} and ${e.right}.`;
+      case 'recurse': return `Slots ${e.offset} and ${e.offset+1} are locked in — recursing into the remaining ${e.n_pairs-1} pairs.`;
+      case 'advance': return `Slots ${e.offset} and ${e.offset+1} are locked in — moving on to the next layer.`;
+      case 'return': return "Base case reached — nothing left to do here.";
+      case 'pop': return "Returning to the caller.";
+      case 'final': return "Done — the row now alternates red, black, red, black\u2026";
+      default: return "";
+    }
+  }
+
+  // ---------- DOM ----------
+  const boardEl = document.getElementById('board');
+  const nInput = document.getElementById('nInput');
+  const buildBtn = document.getElementById('buildBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const backBtn = document.getElementById('backBtn');
+  const fwdBtn = document.getElementById('fwdBtn');
+  const playBtn = document.getElementById('playBtn');
+  const speedInput = document.getElementById('speedInput');
+  const scrub = document.getElementById('scrub');
+  const stepCurEl = document.getElementById('stepCur');
+  const stepTotalEl = document.getElementById('stepTotal');
+  const swapCurEl = document.getElementById('swapCur');
+  const swapTotalEl = document.getElementById('swapTotal');
+  const depthValEl = document.getElementById('depthVal');
+  const depthLabel = document.getElementById('depthLabel');
+  const progressFill = document.getElementById('progressFill');
+  const statusLine = document.getElementById('statusLine');
+  const arrayLine = document.getElementById('arrayLine');
+  const codeBlock = document.getElementById('codeBlock');
+  const swapTableBody = document.getElementById('swapTableBody');
+  const swapNote = document.getElementById('swapNote');
+  const stackView = document.getElementById('stackView');
+  const targetDots = document.getElementById('targetDots');
+  const tabs = document.querySelectorAll('.tab');
+  const recursionTabBtn = document.getElementById('recursionTabBtn');
+  const modeBtns = document.querySelectorAll('.mode-btn');
+  const panels = {
+    code: document.getElementById('panel-code'),
+    full: document.getElementById('panel-full'),
+    swaps: document.getElementById('panel-swaps'),
+    recursion: document.getElementById('panel-recursion'),
+    idea: document.getElementById('panel-idea')
+  };
+  const fullCodeBlock = document.getElementById('fullCodeBlock');
+  const fullCodeDesc = document.getElementById('fullCodeDesc');
+  const copyBtn = document.getElementById('copyBtn');
+
+  let sim=null, n=4, idx=0, checkerEls=[], playTimer=null, mode='recursive';
+  let boardSize=56, boardGap=10;
+  let arrSpans=[], lastPreviewIds=[], dividerEl=null;
+  const SPEEDS = [900,650,450,300,170];
+
+  function buildCode(){
+    const lines = mode==='iterative' ? codeLinesIterative : codeLinesRecursive;
+    codeBlock.innerHTML = lines.map((line,i)=>{
+      const num = i+1;
+      return `<div class="line" data-line="${num}"><span class="ln">${num}</span><span class="src">${tokenizeLine(line)}</span></div>`;
+    }).join("");
+    fullCodeBlock.textContent = mode==='iterative' ? fullCodeTextIterative : fullCodeTextRecursive;
+    fullCodeDesc.innerHTML = mode==='iterative'
+      ? "The complete function — no recursion, just the nested loop you're stepping through."
+      : "The complete function — the loop you're stepping through lives inside <code>solve()</code>.";
+  }
+
+  copyBtn.addEventListener('click', async ()=>{
+    const text = mode==='iterative' ? fullCodeTextIterative : fullCodeTextRecursive;
+    try{
+      await navigator.clipboard.writeText(text);
+      copyBtn.textContent = 'copied';
+      copyBtn.classList.add('copied');
+    }catch(err){
+      copyBtn.textContent = 'select & copy';
+    }
+    setTimeout(()=>{ copyBtn.textContent = 'copy'; copyBtn.classList.remove('copied'); }, 1600);
+  });
+
+  function buildTargetDots(){
+    let html = "";
+    for (let i=0;i<2*n;i++) html += `<span class="dot ${i%2===0?'r':'k'}"></span>`;
+    targetDots.innerHTML = html;
+  }
+
+  function sizeForN(n){
+    if (n<=6)   return {size:56, gap:10};
+    if (n<=9)   return {size:42, gap:8};
+    if (n<=20)  return {size:28, gap:6};
+    if (n<=50)  return {size:16, gap:4};
+    if (n<=150) return {size:9,  gap:2};
+    return {size:5, gap:1};
+  }
+
+  function buildBoard(){
+    boardEl.innerHTML = "";
+    checkerEls = [];
+    const {size, gap} = sizeForN(n);
+    boardSize = size; boardGap = gap;
+    boardEl.style.height = size+'px';
+    boardEl.style.width = (2*n*(size+gap)-gap)+'px';
+    const divider = document.createElement('div');
+    divider.className = 'interval-divider';
+    boardEl.appendChild(divider);
+    dividerEl = divider;
+    for (let id=0; id<2*n; id++){
+      const color = id<n ? 'red' : 'black';
+      const el = document.createElement('div');
+      el.className = `checker ${color}`;
+      el.style.width = size+'px';
+      el.style.height = size+'px';
+      el.innerHTML = `<span class="rim"></span><span class="face"></span>`;
+      el.style.transform = `translateX(${id*(size+gap)}px)`;
+      boardEl.appendChild(el);
+      checkerEls.push({el, id, size, gap});
+    }
+    lastPreviewIds = [];
+    swapWindowStart = 0;
+  }
+
+  function buildArrayLine(){
+    arrayLine.innerHTML = "";
+    arrSpans = [];
+    arrayLine.appendChild(makeSpan('bracket', '['));
+    for (let slot=0; slot<2*n; slot++){
+      const span = makeSpan('arr-el', '');
+      arrayLine.appendChild(span);
+      arrSpans.push(span);
+      if (slot < 2*n-1) arrayLine.appendChild(makeSpan('comma', ', '));
+    }
+    arrayLine.appendChild(makeSpan('bracket', ']'));
+  }
+  function makeSpan(cls, text){
+    const s = document.createElement('span');
+    s.className = cls;
+    s.textContent = text;
+    return s;
+  }
+
+  // ---- checkers: full O(n) pass (jumps) vs O(1) single-slot updates (stepping) ----
+  function positionCheckerAtSlot(state, slot){
+    const id = state.idAtSlot[slot];
+    const c = checkerEls[id];
+    c.el.style.transform = `translateX(${slot*(c.size+c.gap)}px)`;
+  }
+  function lockCheckerAtSlot(state, slot){
+    const id = state.idAtSlot[slot];
+    if (checkerEls[id]) checkerEls[id].el.classList.add('locked');
+  }
+  function updateDivider(state){
+    const showDivider = state.lockedUpTo > 0 && state.lockedUpTo < 2*n;
+    dividerEl.style.opacity = showDivider ? '1' : '0';
+    const px = state.lockedUpTo*(boardSize+boardGap) - boardGap/2;
+    dividerEl.style.transform = `translateX(${px}px)`;
+  }
+  function renderCheckersFull(state, animate){
+    if (!animate) boardEl.classList.add('no-anim');
+    for (let slot=0; slot<state.idAtSlot.length; slot++){
+      positionCheckerAtSlot(state, slot);
+      checkerEls[state.idAtSlot[slot]].el.classList.toggle('locked', slot < state.lockedUpTo);
+    }
+    updateDivider(state);
+    if (!animate){ void boardEl.offsetHeight; boardEl.classList.remove('no-anim'); }
+  }
+
+  // ---- preview outline: O(1) either way since it only ever touches <=2 checkers ----
+  function renderPreview(state){
+    lastPreviewIds.forEach(id=>{ if (checkerEls[id]) checkerEls[id].el.classList.remove('preview'); });
+    lastPreviewIds = [];
+    const e = state.lastEvent;
+    if (e && e.type === 'loop'){
+      const ids = [state.idAtSlot[e.left], state.idAtSlot[e.right]];
+      ids.forEach(id=>checkerEls[id].el.classList.add('preview'));
+      lastPreviewIds = ids;
+    }
+  }
+
+  function flashSwap(state){
+    const e = state.lastEvent;
+    if (!e || e.type!=='swap') return;
+    [state.idAtSlot[e.left], state.idAtSlot[e.right]].forEach(id=>{
+      const c = checkerEls[id];
+      c.el.classList.add('swapping');
+      setTimeout(()=>c.el.classList.remove('swapping'), 550);
+    });
+  }
+
+  function renderCode(state){
+    codeBlock.querySelectorAll('.line').forEach(l=>{
+      l.classList.toggle('active', state.currentLines.includes(Number(l.dataset.line)));
+    });
+    const activeEl = codeBlock.querySelector('.line.active');
+    scrollWithinPanel(panels.code, activeEl);
+  }
+
+  // Scrolls only the panel's own scrollTop so the active line stays in view —
+  // never touches the page/window scroll position (unlike scrollIntoView).
+  function scrollWithinPanel(panelEl, targetEl){
+    if (!targetEl) return;
+    const panelRect = panelEl.getBoundingClientRect();
+    const targetRect = targetEl.getBoundingClientRect();
+    const alreadyVisible = targetRect.top >= panelRect.top && targetRect.bottom <= panelRect.bottom;
+    if (alreadyVisible) return;
+    const delta = (targetRect.top + targetRect.height/2) - (panelRect.top + panelRect.height/2);
+    panelEl.scrollTop += delta;
+  }
+
+  // The swap table is O(n^2) in total size -- at large n that's far more
+  // rows than any DOM should hold at once (millions, for n in the low
+  // thousands). So we only ever keep the most recent MAX_SWAP_ROWS in the
+  // DOM. Sequential stepping (Play / next / back) is O(1) either way --
+  // exactly one row appended or removed per step. A jump (build / reset /
+  // scrub) rebuilds, but only the capped window, so it's O(cap), not O(n^2),
+  // no matter how far the jump is.
+  const MAX_SWAP_ROWS = 500;
+  let swapWindowStart = 0; // global index of the first row currently in the DOM
+
+  function rebuildSwapWindow(state){
+    const target = state.swapRows.length;
+    const start = Math.max(0, target - MAX_SWAP_ROWS);
+    swapTableBody.innerHTML = "";
+    const frag = document.createDocumentFragment();
+    for (let i=start;i<target;i++){
+      const r = state.swapRows[i];
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${r.num}</td><td>${r.left}</td><td>${r.right}</td>`;
+      frag.appendChild(tr);
+    }
+    swapTableBody.appendChild(frag);
+    swapWindowStart = start;
+  }
+
+  function renderSwaps(state){
+    const target = state.swapRows.length;
+    const isLatest = state.lastEvent && state.lastEvent.type === 'swap';
+    const renderedEnd = swapWindowStart + swapTableBody.children.length;
+    const delta = target - renderedEnd;
+
+    if (delta === 1){
+      const r = state.swapRows[target-1];
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${r.num}</td><td>${r.left}</td><td>${r.right}</td>`;
+      swapTableBody.appendChild(tr);
+      if (swapTableBody.children.length > MAX_SWAP_ROWS){
+        swapTableBody.removeChild(swapTableBody.firstChild);
+        swapWindowStart++;
+      }
+    } else if (delta === -1 && target >= swapWindowStart){
+      if (swapTableBody.lastChild) swapTableBody.removeChild(swapTableBody.lastChild);
+    } else if (delta !== 0){
+      rebuildSwapWindow(state);
+    }
+    // delta === 0: nothing changed since the last render, leave the DOM as-is
+
+    const prevLatest = swapTableBody.querySelector('tr.latest');
+    if (prevLatest) prevLatest.classList.remove('latest');
+    if (isLatest && swapTableBody.lastElementChild) swapTableBody.lastElementChild.classList.add('latest');
+
+    swapNote.textContent = swapWindowStart > 0
+      ? `showing the latest ${MAX_SWAP_ROWS.toLocaleString()} of ${target.toLocaleString()} swaps`
+      : "";
+    panels.swaps.scrollTop = panels.swaps.scrollHeight;
+  }
+
+  function renderStack(state){
+    if (state.stack.length===0){
+      const msg = mode==='iterative' ? "No active layer — press step to begin." : "No active call — press step to begin.";
+      stackView.innerHTML = `<p class="empty">${msg}</p>`;
+      return;
+    }
+    stackView.innerHTML = state.stack.map((f,i)=>{
+      const isTop = i===state.stack.length-1;
+      const interval = `${f.offset}\u2013${f.offset+2*f.n_pairs-1}`;
+      const head = mode==='iterative'
+        ? `layer n_pairs=${f.n_pairs}, offset=${f.offset}`
+        : `solve(n_pairs=${f.n_pairs}, offset=${f.offset})`;
+      const status = mode==='iterative' ? 'running' : (isTop?'running':'waiting on child');
+      return `<div class="frame ${isTop?'active':''}" style="margin-left:${f.depth*16}px">
+        <div class="frame-head">${head}</div>
+        <div class="frame-meta">interval [${interval}] &middot; ${status}</div>
+      </div>`;
+    }).join("");
+  }
+  const STACK_CHANGING_EVENTS = new Set(['call','pop','layer','final']);
+
+  function renderStats(state){
+    stepCurEl.textContent = idx;
+    stepTotalEl.textContent = sim.events.length;
+    swapCurEl.textContent = state.swapRows.length;
+    swapTotalEl.textContent = sim.totalSwaps;
+    depthValEl.textContent = mode==='iterative'
+      ? (state.stack.length ? state.stack[0].n_pairs : '\u2013')
+      : state.stack.length;
+    progressFill.style.width = sim.events.length ? `${(idx/sim.events.length)*100}%` : '0%';
+    scrub.max = sim.events.length;
+    scrub.value = idx;
+    statusLine.textContent = statusFor(state.lastEvent, n);
+    backBtn.disabled = idx<=0;
+    fwdBtn.disabled = idx>=sim.events.length;
+    playBtn.disabled = idx>=sim.events.length;
+  }
+
+  // ---- array readout: full O(n) pass (jumps) vs O(1) single-slot updates (stepping) ----
+  function setArraySlot(slot, val, flash){
+    const span = arrSpans[slot];
+    span.textContent = String(val);
+    span.classList.toggle('r', val===0);
+    span.classList.toggle('k', val===1);
+    if (flash){
+      span.classList.add('changed');
+      setTimeout(()=>span.classList.remove('changed'), 550);
+    } else {
+      span.classList.remove('changed');
+    }
+  }
+  function renderArrayFull(state){
+    for (let slot=0; slot<state.idAtSlot.length; slot++){
+      setArraySlot(slot, state.idAtSlot[slot] < n ? 0 : 1, false);
+    }
+  }
+
+  // ---- full render: correct for any jump (build / reset / step back / scrub) ----
+  function render(animate){
+    const state = computeStateAt(sim, idx);
+    renderCheckersFull(state, animate);
+    renderPreview(state);
+    if (animate) flashSwap(state);
+    renderCode(state);
+    renderSwaps(state);
+    renderStack(state);
+    renderStats(state);
+    renderArrayFull(state);
+  }
+
+  // ---- fast path: advance exactly one event, touching only what that event
+  // could have changed. This is what Play and the forward button actually use,
+  // so it's the path that has to stay O(1) regardless of n. ----
+  function stepForward(animate){
+    if (idx>=sim.events.length){ stopPlay(); return; }
+    idx++;
+    const state = computeStateAt(sim, idx);
+    const e = state.lastEvent;
+
+    if (e.type === 'swap'){
+      positionCheckerAtSlot(state, e.left);
+      positionCheckerAtSlot(state, e.right);
+      if (animate) flashSwap(state);
+      setArraySlot(e.left, state.idAtSlot[e.left] < n ? 0 : 1, animate);
+      setArraySlot(e.right, state.idAtSlot[e.right] < n ? 0 : 1, animate);
+    } else if (e.type === 'recurse' || e.type === 'advance'){
+      lockCheckerAtSlot(state, e.offset);
+      lockCheckerAtSlot(state, e.offset+1);
+      updateDivider(state);
+    }
+    renderPreview(state);
+    renderCode(state);
+    renderSwaps(state);
+    if (STACK_CHANGING_EVENTS.has(e.type)) renderStack(state);
+    renderStats(state);
+
+    if (idx>=sim.events.length) stopPlay();
+  }
+
+  function stepBack(){
+    if (idx<=0) return;
+    idx--;
+    render(false);
+  }
+  function stopPlay(){
+    if (playTimer){ clearInterval(playTimer); playTimer=null; }
+    playBtn.textContent = 'play';
+  }
+  function togglePlay(){
+    if (playTimer){ stopPlay(); return; }
+    if (idx>=sim.events.length) return;
+    playBtn.textContent = 'pause';
+    const delay = SPEEDS[Number(speedInput.value)-1] || 450;
+    playTimer = setInterval(()=>stepForward(true), delay);
+  }
+
+  function build(){
+    n = Math.max(1, parseInt(nInput.value,10) || 1);
+    nInput.value = n;
+
+    if (n > 2000){
+      const estSwaps = Math.round(n*(n-1)/2).toLocaleString();
+      const proceed = confirm(
+        `n=${n} means about ${estSwaps} swaps and ${2*n} checkers on screen. ` +
+        `That's a lot of DOM to render and a very long swap table — it may be slow ` +
+        `or use significant memory. Continue anyway?`
+      );
+      if (!proceed) return;
+    }
+    buildCode();
+    try{
+      sim = mode==='iterative' ? simulateIterative(n) : simulateRecursive(n);
+    }catch(err){
+      if (err instanceof RangeError){
+        alert(
+          `n=${n} recurses too deep for the browser's own call stack in recursive mode ` +
+          `-- the same kind of limit that trips up Python's recursive version around ` +
+          `n~1000. Switch to iterative mode, or use a smaller n.`
+        );
+        return;
+      }
+      throw err;
+    }
+    idx = 0;
+    stopPlay();
+    buildBoard();
+    buildTargetDots();
+    buildArrayLine();
+    render(false);
+  }
+
+  buildBtn.addEventListener('click', build);
+  nInput.addEventListener('keydown', e=>{ if (e.key==='Enter') build(); });
+  resetBtn.addEventListener('click', ()=>{ stopPlay(); idx=0; render(false); });
+  backBtn.addEventListener('click', ()=>{ stopPlay(); stepBack(); });
+  fwdBtn.addEventListener('click', ()=>{ stopPlay(); stepForward(true); });
+  playBtn.addEventListener('click', togglePlay);
+  scrub.addEventListener('input', ()=>{ stopPlay(); idx=Number(scrub.value); render(false); });
+  tabs.forEach(t=>t.addEventListener('click', ()=>{
+    tabs.forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    Object.entries(panels).forEach(([key,el])=>el.classList.toggle('hidden', key!==t.dataset.tab));
+  }));
+  modeBtns.forEach(btn=>btn.addEventListener('click', ()=>{
+    if (btn.dataset.mode === mode) return;
+    mode = btn.dataset.mode;
+    modeBtns.forEach(b=>b.classList.toggle('primary', b===btn));
+    recursionTabBtn.textContent = mode==='iterative' ? 'layers' : 'recursion';
+    depthLabel.textContent = mode==='iterative' ? 'active layer' : 'recursion depth';
+    build();
+  }));
+  document.addEventListener('keydown', e=>{
+    if (document.activeElement===nInput) return;
+    if (e.key==='ArrowRight'){ stopPlay(); stepForward(true); }
+    if (e.key==='ArrowLeft'){ stopPlay(); stepBack(); }
+    if (e.key===' '){ e.preventDefault(); togglePlay(); }
+  });
+
+  build();
+})();
+</script>
+</body>
+</html>
